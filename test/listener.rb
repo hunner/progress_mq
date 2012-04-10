@@ -22,5 +22,5 @@ puts("Listening for log messages on /queue/events@#{amqserver}")
 while true
   msg = @conn.receive.body
 
-  puts (msg)
+  puts (JSON.pretty_generate(JSON.parse(msg)))
 end
