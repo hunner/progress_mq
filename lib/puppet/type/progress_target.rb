@@ -5,6 +5,5 @@ Puppet::Type.newtype(:progress_target) do
     munge do |value|
       Array(value)
     end
-    #defaultto('/queue/events')
   end
 end
