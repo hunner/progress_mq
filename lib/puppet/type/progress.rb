@@ -1,7 +1,4 @@
-Puppet::Type.newtype(:progress) do
-  #p Puppet::Util::Log.desttypes
-  #require 'puppet/util/log/queue'
-  #p Puppet::Util::Log.desttypes
+Puppet::Type.newtype(:progress_server) do
   @doc = "blank"
   ensurable
   newparam(:name)
@@ -23,15 +20,5 @@ Puppet::Type.newtype(:progress) do
         false
       end
     end
-  end
-  newparam(:types, :array_matching => :all) do
-    defaultto(["package"])
-    munge do |value|
-      Array(value)
-    end
-  end
-  newparam(:target) do
-    newvalues(/^[a-z\/]+$/)
-    defaultto('/queue/events')
   end
 end

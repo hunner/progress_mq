@@ -1,4 +1,4 @@
-Puppet::Type.type(:progress).provide(:default) do
+Puppet::Type.type(:progress_server).provide(:default) do
   desc "This is a default provider that does nothing."
   def create
     true
