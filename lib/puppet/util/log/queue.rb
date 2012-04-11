@@ -46,6 +46,7 @@ Puppet::Util::Log.newdesttype :queue do
         @message[type]['progress']['total'] = resource_count[type]
         @message[type]['progress']['processed'] = 0
         @message[type]['progress']['failed'] = 0
+        @message[type]['progress']['successful'] = 0
       end
     rescue => e
       p e
@@ -109,26 +110,42 @@ Puppet::Util::Log.newdesttype :queue do
       case status
       when :err # need to transition to error state and count
         @message[type]['progress']['failed'] += 1
-      else # need to transition to nonerror state and count
         @message[type]['progress']['processed'] += 1
+        @resource_state[type][title] = :err
+      when :eval #need to transition to final state and count
+        @message[type]['progress']['processed'] += 1
+        @message[type]['progress']['successful'] += 1
+        @resource_state[type][title] = :eval
+        return true
+      else #need to transition to process state
+        @message[type]['progress']['processed'] += 1
+        @resource_state[type][title] = :other
       end
-      @resource_state[type][title] = status
     else # not in start state
-      case @resource_state[type][title]
-      when :err # in error state; do nothing
-        return false
-      else # in nonerror state
+      case @resource_state[type][title] #where are we?
+      when :err # in error state
         case status
-        when :err # transition to error state and count
-          @resource_state[type][title] = :err
+        when :eval #transition to final state; don't count
+          @resource_state[type][title] = :eval
+          return true
+        else # do nothing
+        end
+      when :eval
+        raise Puppet::Error, "Incorrect state transition for evaltrace"
+      else #in nonerror state
+        case status
+        when :err #transition to error state; count +f
           @message[type]['progress']['failed'] += 1
-          @message[type]['progress']['processed'] -= 1
-        else # don't transition; don't count
-          return false
+          @resource_state[type][title] = :err
+        when :eval #transition to final state and count
+          @message[type]['progress']['successful'] += 1
+          @resource_state[type][title] = :eval
+          return true
+        else #don't transition; don't count
         end
       end
     end
-    true
+    false
   end
 
   def convert_msg(msg)
@@ -141,9 +158,6 @@ Puppet::Util::Log.newdesttype :queue do
       when 'Puppet'
         case msg.message
         when /Finished catalog run/
-          @message.each do |k,v|
-            v['progress']['processed'] = v['progress']['total'] - v['progress']['failed']
-          end
           message = @message
         end
       when /.+\/.+/
@@ -151,8 +165,9 @@ Puppet::Util::Log.newdesttype :queue do
           if m = msg.source.match(/([^\/]+?)\[([^\[]+?)\](\/[a-z]+)?$/)
             resource_type = m[1].downcase
             resource_title = m[2]
-            msg.level = :err if msg.message =~ /^Dependency \S+ has failures: true$/
-            if count_resources(resource_type,resource_title,msg.level)
+            level = :err if msg.message =~ /^Dependency \S+ has failures: true$/
+            level = :eval if msg.message =~ /^Evaluated in [\d\.]+ seconds$/
+            if count_resources(resource_type,resource_title,level || msg.level)
               message[resource_type] = @message[resource_type].clone
               message[resource_type]['title'] = resource_title
             end
