@@ -9,14 +9,9 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def initialize
-    #configfile = File.join([File.dirname(Puppet.settings[:config]), "queue.yamaoeul"])
-    #Puppet.warning("#{self.class}: config file #{configfile} not readable") unless File.exist?(configfile)
     resource_count = Hash.new(0)
-    #@resources_processed = Hash.new(0)
-    #@resources_failed = Hash.new(0)
     resource_keep = Array.new
-    @last_resource = Hash.new("")
-    @resource_state
+    @resource_state = Hash.new({})
     @config = Hash.new([])
     @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     begin
@@ -57,7 +52,6 @@ Puppet::Util::Log.newdesttype :queue do
       throw Puppet::ParseError
     end
     @config[:hosts]
-    #connection.publish(@hosts[0][:target], "loaded")
   end
 
   def connections
@@ -110,21 +104,28 @@ Puppet::Util::Log.newdesttype :queue do
 
   def count_resources(type,title,status)
     return false unless @message.include?(type)
-    if ! (@last_resource[:type] == type and @last_resource[:title] == title)
-      if status == :err
+    # State machine!
+    if ! @resource_state[type][title] # start state
+      case status
+      when :err # need to transition to error state and count
         @message[type]['progress']['failed'] += 1
-      else
-        p "count"
+      else # need to transition to nonerror state and count
         @message[type]['progress']['processed'] += 1
       end
-      @last_resource[:title] = title
-      @last_resource[:type] = type
-    else
-      if status == :err
-        @message[type]['progress']['failed'] += 1
-        @message[type]['progress']['processed'] -= 1
-      else
+      @resource_state[type][title] = status
+    else # not in start state
+      case @resource_state[type][title]
+      when :err # in error state; do nothing
         return false
+      else # in nonerror state
+        case status
+        when :err # transition to error state and count
+          @resource_state[type][title] = :err
+          @message[type]['progress']['failed'] += 1
+          @message[type]['progress']['processed'] -= 1
+        else # don't transition; don't count
+          return false
+        end
       end
     end
     true
