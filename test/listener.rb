@@ -2,6 +2,7 @@
 
 require 'rubygems'
 require 'stomp'
+require 'json'
 
 amqport = 61613
 amqserver = "training.puppetlabs.lan"
@@ -22,5 +23,6 @@ puts("Listening for log messages on /queue/events@#{amqserver}")
 while true
   msg = @conn.receive.body
 
-  puts (JSON.pretty_generate(JSON.parse(msg)))
+  puts JSON.pretty_generate(JSON.parse(msg))
+  #puts msg
 end
