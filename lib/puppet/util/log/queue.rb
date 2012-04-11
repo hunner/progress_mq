@@ -74,23 +74,68 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def handle(msg)
-    if event = convert_msg(msg)
-      @config[:targets].each do |target|
-        Timeout::timeout(2) do
-          connections.publish(target, event.to_json)
-        end
-      end
-    end
+    content = convert_msg(msg)
+    time = convert_time(msg.time)
+    send_msg(envelope(content,time).to_json) unless content.empty?
   end
 
   private
 
+  def send_msg(json)
+    begin
+      JSON.parse(json)
+    rescue JSON::ParserError => e
+      raise ArgumentError, e.msg
+    end
+    @config[:targets].each do |target|
+      Timeout::timeout(2) do
+        connections.publish(target, json)
+      end
+    end
+  end
+
+  def envelope(content,time)
+    {
+      "host"            => Facter.value("fqdn"),
+      "catalog_version" => config_version,
+      "time"            => time,
+      "content"         => content
+    }
+  end
+
+  def convert_time(time)
+    time.utc.iso8601
+  rescue => e
+    Puppet.warn(e.message)
+    time
+  end
+
+  def count_resources(name,type,title,status)
+    return false if @message[type].nil? or @message[type].empty?
+    if @last_resource[:name] != name
+      if status == :err
+        @message[type]['progress']['failed'] += 1
+      else
+        @message[type]['progress']['processed'] += 1
+      end
+      @last_resource[:title] = title
+      @last_resource[:type] = type
+    else
+      if status == :err
+        @message[type]['progress']['failed'] += 1
+        @message[type]['progress']['processed'] -= 1
+      else
+        return false
+      end
+    end
+    true
+  end
+
   def convert_msg(msg)
     message = Hash.new
+    return msg unless msg.respond_to?(:message)
     begin
-      if count = JSON.parse(msg.message)
-        message = count
-      end
+      message = JSON.parse(msg.message)
     rescue JSON::ParserError => e
       case msg.source
       when 'Puppet'
@@ -104,37 +149,20 @@ Puppet::Util::Log.newdesttype :queue do
       when /.+\/.+/
         begin
           if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])\/[a-z]+$/)
-            resource_type = m[2].downcase
-            return if @message[resource_type].nil? or @message[resource_type].empty?
-            if @last_resource[:name] != m[1]
-              if msg.level == :err
-                @message[resource_type]['progress']['failed'] += 1
-              else
-                @message[resource_type]['progress']['processed'] += 1
-              end
-              @last_resource[:name] = m[1]
-              @last_resource[:type] = resource_type
-            else
-              if msg.level == :err
-                @message[resource_type]['progress']['failed'] += 1
-                @message[resource_type]['progress']['processed'] -= 1
-              else
-                return
-              end
+            p (resource_name = m[1])
+            p (resource_type = m[2].downcase)
+            p (resource_title = m[3])
+            if count_resources(resource_name,resource_type,resource_title,msg.level)
+              message[resource_type] = @message[resource_type].clone
+              message[resource_type]['title'] = resource_title
             end
-            message[resource_type] = @message[resource_type].clone
-            message[resource_type]['title'] = m[3]
           end
         rescue => e
           p e
         end
       end
     end
-    {
-      "host"            => Facter.value("fqdn"),
-      "catalog_version" => config_version,
-      "time"            => msg.time,
-      "content"         => message
-    } unless message.empty?
+    message
   end
 end
+    #if @last_resource[:name] != name
