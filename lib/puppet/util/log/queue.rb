@@ -16,6 +16,7 @@ Puppet::Util::Log.newdesttype :queue do
     #@resources_failed = Hash.new(0)
     resource_keep = Array.new
     @last_resource = Hash.new("")
+    @resource_state
     @config = Hash.new([])
     @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     begin
@@ -25,7 +26,6 @@ Puppet::Util::Log.newdesttype :queue do
     end
     begin
       @config[:hosts] = @catalog.resource_keys.map do |type, title|
-        #p "#{type} #{title}"
         resource_count[type.downcase] += 1
         resource = @catalog.resource("#{type}[#{title}]").to_ral
         case type
@@ -108,13 +108,13 @@ Puppet::Util::Log.newdesttype :queue do
     time
   end
 
-  def count_resources(name,type,title,status)
+  def count_resources(type,title,status)
     return false unless @message.include?(type)
-    if @last_resource[:name] != name
-    #if @last_resource[:type] != type and @last_resource[:title] != title
+    if ! (@last_resource[:type] == type and @last_resource[:title] == title)
       if status == :err
         @message[type]['progress']['failed'] += 1
       else
+        p "count"
         @message[type]['progress']['processed'] += 1
       end
       @last_resource[:title] = title
@@ -147,11 +147,10 @@ Puppet::Util::Log.newdesttype :queue do
         end
       when /.+\/.+/
         begin
-          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
-            resource_name = m[1]
-            resource_type = m[2].downcase
-            resource_title = m[3]
-            if count_resources(resource_name,resource_type,resource_title,msg.level)
+          if m = msg.source.match(/([^\/]+?)\[([^\[]+?)\](\/[a-z]+)?$/)
+            resource_type = m[1].downcase
+            resource_title = m[2]
+            if count_resources(resource_type,resource_title,msg.level)
               message[resource_type] = @message[resource_type].clone
               message[resource_type]['title'] = resource_title
             end
