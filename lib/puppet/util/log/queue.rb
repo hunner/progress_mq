@@ -120,7 +120,7 @@ Puppet::Util::Log.newdesttype :queue do
       @resource_state[type][title] = status
     else # not in start state
       case @resource_state[type][title]
-      when :err # in error state; do nothing
+      when :err, :skip # in error or skip state; do nothing
         return false
       else # in nonerror state
         case status
