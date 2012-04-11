@@ -151,6 +151,7 @@ Puppet::Util::Log.newdesttype :queue do
           if m = msg.source.match(/([^\/]+?)\[([^\[]+?)\](\/[a-z]+)?$/)
             resource_type = m[1].downcase
             resource_title = m[2]
+            msg.level = :err if msg.message =~ /^Dependency \S+ has failures: true$/
             if count_resources(resource_type,resource_title,msg.level)
               message[resource_type] = @message[resource_type].clone
               message[resource_type]['title'] = resource_title
