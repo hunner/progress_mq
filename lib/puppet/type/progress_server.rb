@@ -11,14 +11,7 @@ Puppet::Type.newtype(:progress_server) do
     newvalues(/^\d+$/)
   end
   newparam(:ssl) do
-    newvalues(:true,:false)
-    defaultto :true
-    munge do |value|
-      if value == :true
-        true
-      else
-        false
-      end
-    end
+    newvalues(true,false)
+    defaultto true
   end
 end
