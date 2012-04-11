@@ -7,6 +7,8 @@ class progress::queue {
     port     => 61613,
     ssl      => true,
   }
-  progress_resource { 'notify': }
+  #progress_resource { 'notify': }
+  progress_resource { 'package': }
+  progress_resource { 'file': }
   progress_target { '/queue/events': }
 }
