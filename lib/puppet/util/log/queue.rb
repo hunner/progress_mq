@@ -17,8 +17,7 @@ Puppet::Util::Log.newdesttype :queue do
     resource_keep = Array.new
     @last_resource = Hash.new("")
     @config = Hash.new([])
-    @message = Hash.new
-    #@message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
+    @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     begin
       @catalog = Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
     rescue => e
@@ -49,8 +48,6 @@ Puppet::Util::Log.newdesttype :queue do
         end
       end.compact
       resource_keep.each do |type|
-        @message[type] = Hash.new
-        @message[type]['progress'] = Hash.new
         @message[type]['progress']['total'] = resource_count[type]
         @message[type]['progress']['processed'] = 0
         @message[type]['progress']['failed'] = 0
@@ -112,7 +109,7 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def count_resources(name,type,title,status)
-    return false if @message[type].nil? or @message[type].empty?
+    return false unless @message.include?(type)
     if @last_resource[:name] != name
     #if @last_resource[:type] != type and @last_resource[:title] != title
       if status == :err
@@ -167,4 +164,3 @@ Puppet::Util::Log.newdesttype :queue do
     message
   end
 end
-    #if @last_resource[:name] != name
