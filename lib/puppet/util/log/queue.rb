@@ -18,6 +18,7 @@ Puppet::Util::Log.newdesttype :queue do
     @last_resource = Hash.new("")
     @config = Hash.new([])
     @message = Hash.new
+    #@message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     begin
       @catalog = Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
     rescue => e
@@ -113,6 +114,7 @@ Puppet::Util::Log.newdesttype :queue do
   def count_resources(name,type,title,status)
     return false if @message[type].nil? or @message[type].empty?
     if @last_resource[:name] != name
+    #if @last_resource[:type] != type and @last_resource[:title] != title
       if status == :err
         @message[type]['progress']['failed'] += 1
       else
@@ -148,10 +150,10 @@ Puppet::Util::Log.newdesttype :queue do
         end
       when /.+\/.+/
         begin
-          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])\/[a-z]+$/)
-            p (resource_name = m[1])
-            p (resource_type = m[2].downcase)
-            p (resource_title = m[3])
+          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
+            resource_name = m[1]
+            resource_type = m[2].downcase
+            resource_title = m[3]
             if count_resources(resource_name,resource_type,resource_title,msg.level)
               message[resource_type] = @message[resource_type].clone
               message[resource_type]['title'] = resource_title
