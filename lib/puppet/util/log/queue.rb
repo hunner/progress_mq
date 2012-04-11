@@ -11,61 +11,61 @@ Puppet::Util::Log.newdesttype :queue do
   def initialize
     #configfile = File.join([File.dirname(Puppet.settings[:config]), "queue.yamaoeul"])
     #Puppet.warning("#{self.class}: config file #{configfile} not readable") unless File.exist?(configfile)
-    @resource_count = Hash.new(0)
-    @resources_completed = Hash.new(0)
-    @resources_failed = Hash.new(0)
-    @seen_resources = Array.new
-    @last_resource = Hash.new
+    resource_count = Hash.new(0)
+    #@resources_processed = Hash.new(0)
+    #@resources_failed = Hash.new(0)
+    resource_keep = Array.new
+    @last_resource = Hash.new("")
     @config = Hash.new([])
+    @message = Hash.new
     begin
       @catalog = Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
     rescue => e
       p e
     end
-    @config[:hosts] = @catalog.resource_keys.map do |type, title|
-      p "#{type} #{title}"
-      @resource_count[type.downcase] += 1
-      begin
+    begin
+      @config[:hosts] = @catalog.resource_keys.map do |type, title|
+        #p "#{type} #{title}"
+        resource_count[type.downcase] += 1
         resource = @catalog.resource("#{type}[#{title}]").to_ral
         case type
-        when 'Progress'
-          puts "progress"
-          puts "progress2"
+        when 'Progress_server'
           {
             :login    => resource[:user],
             :passcode => resource[:password],
             :host     => resource[:host],
             :port     => resource[:port],
             :ssl      => resource[:ssl],
-            :target   => resource[:target]
           }
         when 'Progress_resource'
-          puts "resource"
           resource[:resources].each do |r_type|
-            @resources_completed[r_type.downcase] = 0
+            resource_keep << r_type.downcase
           end
-          puts "resource2"
           nil
         when 'Progress_target'
-          puts "target"
           @config[:targets] += resource[:targets]
-          puts "target 2"
           nil
         end
-      rescue => e
-        p e
-        require 'ruby-debug' ; debugger ; 1
-        throw Puppet::ArgumentError
+      end.compact
+      resource_keep.each do |type|
+        @message[type] = Hash.new
+        @message[type]['progress'] = Hash.new
+        @message[type]['progress']['total'] = resource_count[type]
+        @message[type]['progress']['processed'] = 0
+        @message[type]['progress']['failed'] = 0
       end
-    end.compact
-    @hosts
+    rescue => e
+      p e
+      throw Puppet::ParseError
+    end
+    @config[:hosts]
     #connection.publish(@hosts[0][:target], "loaded")
   end
 
   def connections
     return @connections if @connections
     @connections = Stomp::Connection.new({:hosts => @config[:hosts]})
-    Puppet.notice({"resource_count" => @resource_count}.to_json) if @connections
+    Puppet.notice(@message.to_json) if @connections
     @connections
   end
 
@@ -83,10 +83,12 @@ Puppet::Util::Log.newdesttype :queue do
     end
   end
 
+  private
+
   def convert_msg(msg)
     message = Hash.new
     begin
-      if count = JSON.parse(msg.message) and count['resource_count']
+      if count = JSON.parse(msg.message)
         message = count
       end
     rescue JSON::ParserError => e
@@ -94,29 +96,37 @@ Puppet::Util::Log.newdesttype :queue do
       when 'Puppet'
         case msg.message
         when /Finished catalog run/
+          @message.each do |k,v|
+            v['progress']['processed'] = v['progress']['total'] - v['progress']['failed']
+          end
+          message = @message
         end
       when /.+\/.+/
-        if m = msg.source.split(/\//)[-2].match(/(.+)\[(.+)\]/)
-          #first resource                 @last_resource.empty?
-          #next resource after failed     @last_resource[state] == :err
-          #next resource after success    @last_resource[:name] != m[0]
-          #next resource after don't-care @last_resource[:name] != m[0]
-          #same resource after don't-care @last_resource[:name] != m[0]
-          #same resource after care       @last_resource[:name] == m[0]
-          if msg.level == :err
-            @last_resource = ""
+        begin
+          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])\/[a-z]+$/)
+            resource_type = m[2].downcase
+            return if @message[resource_type].nil? or @message[resource_type].empty?
+            if @last_resource[:name] != m[1]
+              if msg.level == :err
+                @message[resource_type]['progress']['failed'] += 1
+              else
+                @message[resource_type]['progress']['processed'] += 1
+              end
+              @last_resource[:name] = m[1]
+              @last_resource[:type] = resource_type
+            else
+              if msg.level == :err
+                @message[resource_type]['progress']['failed'] += 1
+                @message[resource_type]['progress']['processed'] -= 1
+              else
+                return
+              end
+            end
+            message[resource_type] = @message[resource_type].clone
+            message[resource_type]['title'] = m[3]
           end
-          #require 'ruby-debug' ; debugger ; 1
-          @last_resource = m[0]
-          @seen_resources << m[0]
-          resource_type = m[1].downcase
-          message[resource_type] = m[2]
-          message['progress'] = {
-            'completed' => @resources_completed[resource_type],
-            'failed'    => @resources_failed[resource_type],
-            'total'     => @resource_count[resource_type]
-          }
-          @resourecs_completed[resource_type] += 1
+        rescue => e
+          p e
         end
       end
     end
