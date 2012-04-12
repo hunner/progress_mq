@@ -72,7 +72,11 @@ Puppet::Util::Log.newdesttype :queue do
   def handle(msg)
     content = convert_msg(msg)
     time = convert_time(msg.time)
-    send_msg(envelope(content,time).to_json) unless content.empty?
+    if ! content.empty?
+      message = envelope(content,time).to_json
+      send_msg(message)
+      write_msg(File.join(Puppet[:logdir], "progress.json"), message)
+    end
   end
 
   private
@@ -87,6 +91,16 @@ Puppet::Util::Log.newdesttype :queue do
       Timeout::timeout(2) do
         connections.publish(target, json)
       end
+    end
+  end
+
+  def write_msg(path, json)
+    begin
+      File.open(path, 'a') do |f|
+        f.puts json
+      end
+    rescue => e
+      p e
     end
   end
 
