@@ -186,14 +186,17 @@ Puppet::Util::Log.newdesttype :queue do
         end
       when /.+\/.+/
         begin
-          if m = msg.source.match(/([^\/]+?)\[([^\[]+?)\](\/[a-z]+)?$/)
-            resource_type = m[1].downcase
-            resource_title = m[2]
+          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
+            resource_name = m[1]
+            resource_type = m[2].downcase
+            resource_title = m[3]
             level = :skip if msg.message =~ /^Dependency \S+ has failures: true$/
             level = :eval if msg.message =~ /^Evaluated in [\d\.]+ seconds$/
             if count_resources(resource_type,resource_title,level || msg.level)
               message[resource_type] = @message[resource_type].clone
-              message[resource_type]['title'] = resource_title
+              message['resource'] = resource_name
+              message['type'] = resource_type
+              message['title'] = resource_title
             end
           end
         rescue => e
