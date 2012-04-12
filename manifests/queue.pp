@@ -1,14 +1,13 @@
 class progress::queue {
+  include progress::params
   progress_server { "queue":
     ensure   => 'present',
-    user     => 'mcollective',
-    host     => 'training.puppetlabs.lan',
-    password => '3RQTuUM41Gq97EjFNxxa',
-    port     => 61613,
-    ssl      => true,
+    user     => $progress::params::user,
+    host     => $progress::params::host,
+    password => $progress::params::password,
+    port     => $progress::params::port,
+    ssl      => $progress::params::ssl,
   }
-  progress_resource { 'notify': }
-  progress_resource { 'package': }
-  progress_resource { 'file': }
-  progress_target { '/queue/events': }
+  progress_resource { $progress::params::resources: }
+  progress_target { $progress::params::targets: }
 }
