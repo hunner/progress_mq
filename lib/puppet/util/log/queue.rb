@@ -16,6 +16,7 @@ Puppet::Util::Log.newdesttype :queue do
     @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     begin
       @catalog = Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
+      #@catalog = Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
     rescue => e
       p e
     end
@@ -61,7 +62,7 @@ Puppet::Util::Log.newdesttype :queue do
   def connections
     return @connections if @connections
     @connections = Stomp::Connection.new({:hosts => @config[:hosts]})
-    Puppet.notice(@message.to_json) if @connections
+    Puppet.notice((@message.merge({'title' => 'starting'})).to_json) if @connections
     @connections
   end
 
@@ -182,7 +183,7 @@ Puppet::Util::Log.newdesttype :queue do
               v['progress']['processed'] = v['progress']['total']
             end
           end
-          message = @message
+          message = @message.merge({'title' => 'finished'})
         end
       when /.+\/.+/
         begin
