@@ -2,7 +2,7 @@ require 'rubygems'
 require 'json'
 
 Puppet::Reports.register_report(:queue) do
-  desc "document the report"
+  desc "Send final report statistics and resource statuses to MQ server."
   def process
     return unless Puppet.features.stomp?
     configfile = File.join(Puppet[:confdir], "queue.yaml")
