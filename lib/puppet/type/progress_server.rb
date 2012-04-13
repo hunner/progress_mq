@@ -18,6 +18,7 @@ Puppet::Type.newtype(:progress_server) do
   end
   newparam(:port) do
     desc "Port of MQ server."
+    defaultto(61613)
     newvalues(/^\d+$/)
   end
   newparam(:ssl) do

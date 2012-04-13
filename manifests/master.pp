@@ -1,13 +1,46 @@
-class progress::master {
-  include progress::params
-  $user      = $progress::params::user
-  $host      = $progress::params::host
-  $password  = $progress::params::password
-  $port      = $progress::params::port
-  $ssl       = $progress::params::ssl
-  $targets   = $progress::params::targets
-  $resources = $progress::params::resources
-  # Template uses above variables
+# = Class: progress::master
+#
+# This class sets up the MQ report processor. This class is set up to work
+# either directly, or with Hiera.
+#
+# == Parameters:
+#
+# $servers:: This attribute is a hash of MQ server settings to which the
+#            report processor may log. Each server hash is composed of the
+#            following keys: $user, $host, $password, $port, $ssl and is used to
+#            create the configuration file. May be declared in Hiera as
+#            $progress_servers.
+#
+# $targets:: The target queues to which progress should be logged. May be a
+#            string or an array. May be declared in Hiera as $progress_targets.
+#
+# == Actions:
+#   Places configuration file for queue report processor.
+#
+# == Requires:
+#   - JSON ruby gem
+#   - STOMP ruby gem
+#
+# == Sample Usage:
+#   # If you have Hiera:
+#   include progress::master
+#
+#   # Otherwise:
+#   class { 'progress::master':
+#     servers   => {
+#       'example server' => {
+#         host     => 'stomp.example.com',
+#         user     => 'mq_user',
+#         password => 'mq_user_password',
+#       },
+#     },
+#     targets   => '/queue/progress',
+#   }
+#
+class progress::master (
+  $servers = hiera_hash('progress_servers'),
+  $targets = hiera_array('progress_targets','/queue/events'),
+) {
   file { '/etc/puppetlabs/puppet/queue.yaml':
     owner   => 'pe-puppet',
     group   => 'pe-puppet',
