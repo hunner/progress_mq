@@ -1,0 +1,16 @@
+<%=
+require 'yaml'
+
+{
+  'targets'   => targets,
+  'resources' => resources,
+  'hosts'     => [{
+    'login'    => user,
+    'passcode' => password,
+    'host'     => host,
+    'port'     => port,
+    'ssl'      => ssl
+  }]
+}.to_yaml
+%>
+
