@@ -10,6 +10,7 @@ Puppet::Type.type(:progress_server).provide(:default) do
   end
   def exists?
     #Puppet::Util::Log.remove_const(:DestQueue) if defined?(Puppet::Util::Log::DestQueue)
+    require 'rubygems'
     require 'json'
     require 'puppet/util/log/queue' unless defined?(Puppet::Util::Log::DestQueue)
     Puppet::Util::Log.newdestination(:queue)
