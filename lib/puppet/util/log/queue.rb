@@ -62,7 +62,7 @@ Puppet::Util::Log.newdesttype :queue do
   def connections
     return @connections if @connections
     @connections = Stomp::Connection.new({:hosts => @config[:hosts]})
-    Puppet.notice((@message.merge({'title' => 'starting'})).to_json) if @connections
+    Puppet.notice((@message.merge({'puppet_run_status' => 'starting'})).to_json) if @connections
     @connections
   end
 
@@ -183,7 +183,7 @@ Puppet::Util::Log.newdesttype :queue do
               v['progress']['processed'] = v['progress']['total']
             end
           end
-          message = @message.merge({'title' => 'finished'})
+          message = @message.merge({'puppet_run_status' => 'finished'})
         end
       when /.+\/.+/
         begin
