@@ -52,7 +52,7 @@
 #
 class progress (
   $servers = {},
-  $targets = '/queue/progress' => {}},
+  $targets = {'/queue/progress' => {}},
   $resources = "package"
 ) {
   class { 'progress::servers':

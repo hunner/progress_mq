@@ -14,7 +14,6 @@ Puppet::Reports.register_report(:queue) do
       config["targets"] = config["targets"].delete_if { |k,v|
         v['type'] and v['type'] == 'file'
       }.keys
-      p config
       send_msg(config["hosts"], config["targets"], report.to_json)
     rescue => e
       p e

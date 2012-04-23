@@ -205,7 +205,6 @@ Puppet::Util::Log.newdesttype :queue do
           end
           message = @message.merge({'puppet_run_status' => 'finished'})
         when /Not using expired catalog/
-          p "skipping msg"
           return nil
         end
       when /.+\/.+/
