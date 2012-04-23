@@ -38,7 +38,12 @@
 #         password => 'mq_user_password',
 #       },
 #     },
-#     targets   => '/queue/progress',
+#     targets   => {
+#       '/queue/progress'        => {},
+#       '/var/log/progress.json' => {
+#         'type' => 'file'
+#       },
+#     },
 #     resources => [
 #       'package',
 #       'service',
@@ -47,16 +52,12 @@
 #
 class progress (
   $servers = {},
-  $targets = '/queue/events',
+  $targets = {}, #'/queue/events' => {}},
   $resources = "package"
 ) {
-  stage { 'progress':
-    before => Stage['main'],
-  }
   class { 'progress::servers':
     servers   => $servers,
     targets   => $targets,
     resources => $resources,
-    stage     => 'progress',
   }
 }

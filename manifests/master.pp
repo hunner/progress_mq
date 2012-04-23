@@ -39,7 +39,7 @@
 #
 class progress::master (
   $servers = hiera_hash('progress_servers'),
-  $targets = hiera_array('progress_targets','/queue/events')
+  $targets = hiera_hash('progress_targets',{'/queue/events' => {}})
 ) {
   file { '/etc/puppetlabs/puppet/queue.yaml':
     owner   => 'pe-puppet',
