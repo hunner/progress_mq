@@ -16,9 +16,9 @@ credentials = {:hosts => [{:login => @user, :passcode => @password, :host => amq
 
 STDOUT.sync = true
 
-@conn.subscribe("/queue/progress")
+@conn.subscribe("/queue/*")
 
-puts("Listening for log messages on /queue/events@#{amqserver}")
+puts("Listening for log messages on /queue/progress@#{amqserver}")
 
 while true
   msg = @conn.receive.body
