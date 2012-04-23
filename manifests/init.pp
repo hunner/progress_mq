@@ -12,8 +12,8 @@
 #            declare progress_server resources. May be declared in Hiera as
 #            $progress_servers.
 #
-# $targets:: The target queues to which progress should be logged. May be a
-#            string or an array. May be declared in Hiera as $progress_targets.
+# $targets:: The target queues or files to which progress should be logged. Must
+#            be a hash. May be declared in Hiera as $progress_targets.
 #
 # $resources:: The resources of which to track the progress. May be a string or
 #              an array.
@@ -52,7 +52,7 @@
 #
 class progress (
   $servers = {},
-  $targets = {}, #'/queue/events' => {}},
+  $targets = '/queue/progress' => {}},
   $resources = "package"
 ) {
   class { 'progress::servers':

@@ -1,7 +1,7 @@
 # = Class: progress::master
 #
-# This class sets up the MQ report processor. This class is set up to work
-# either directly, or with Hiera.
+# This class sets up the MQ report processor on a Puppet master. This class is
+# set up to work either directly, or with Hiera.
 #
 # == Parameters:
 #
@@ -11,8 +11,8 @@
 #            create the configuration file. May be declared in Hiera as
 #            $progress_servers.
 #
-# $targets:: The target queues to which progress should be logged. May be a
-#            string or an array. May be declared in Hiera as $progress_targets.
+# $targets:: The target queues or files to which progress should be logged. Must
+#            be a hash. May be declared in Hiera as $progress_targets.
 #
 # == Actions:
 #   Places configuration file for queue report processor.
@@ -34,7 +34,12 @@
 #         password => 'mq_user_password',
 #       },
 #     },
-#     targets   => '/queue/progress',
+#     targets   => {
+#       '/queue/progress'        => {},
+#       '/var/log/progress.json' => {
+#         'type' => 'file'
+#       },
+#     },
 #   }
 #
 class progress::master (
