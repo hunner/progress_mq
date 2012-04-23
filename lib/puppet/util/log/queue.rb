@@ -39,7 +39,10 @@ Puppet::Util::Log.newdesttype :queue do
           end
           nil
         when 'Progress_target'
-          @config[:targets] += resource[:targets]
+          @config[:targets] << {
+            'target' => resource[:target],
+            'type'   => resource[:type],
+          }
           nil
         end
       end.compact
@@ -75,29 +78,36 @@ Puppet::Util::Log.newdesttype :queue do
     time = convert_time(msg.time)
     if ! content.empty?
       message = envelope(content,time).to_json
-      send_msg(message)
-      write_msg(File.join(Puppet[:logdir], "progress.json"), message)
+      @config[:targets].each do |target|
+        case target['type']
+        when :file, :file_append
+          write_msg(target['type'],target['target'],message)
+        when :queue
+          send_msg(target['target'],message)
+        else
+          raise Puppet::Error, "Incorrect 'type' value for #{target['target']}"
+        end
+      end
     end
   end
 
   private
 
-  def send_msg(json)
+  def send_msg(target,json)
     begin
       JSON.parse(json)
     rescue JSON::ParserError => e
       raise ArgumentError, e.msg
     end
-    @config[:targets].each do |target|
-      Timeout::timeout(2) do
-        connections.publish(target, json)
-      end
+    Timeout::timeout(2) do
+      connections.publish(target, json)
     end
   end
 
-  def write_msg(path, json)
+  def write_msg(type, path, json)
     begin
-      File.open(path, 'a') do |f|
+      mode = type == :file_append ? 'a' : 'w'
+      File.open(path, mode) do |f|
         f.puts json
       end
     rescue => e
