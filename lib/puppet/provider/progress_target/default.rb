@@ -1,5 +1,3 @@
-require 'puppet/provider/progress'
-
 Puppet::Type.type(:progress_target).provide(:default) do
   desc "Default provider for a progress target. Exists to load the progress queue
   log destination"
