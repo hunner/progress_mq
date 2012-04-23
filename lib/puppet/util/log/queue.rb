@@ -9,21 +9,30 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def initialize
-    resource_count = Hash.new(0)
-    resource_keep = Array.new
     @resource_state = Hash.new({})
-    @config = Hash.new([])
     @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
-    begin
-      @catalog = Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
-      #@catalog = Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
+    true
+  end
+
+  def catalog
+    @catalog ||= begin
+      #Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
+      Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
     rescue => e
       p e
+      nil
     end
-    begin
-      @config[:hosts] = @catalog.resource_keys.map do |type, title|
+  end
+
+  def config
+    @config ||= begin
+      nil if ! catalog
+      resource_count = Hash.new(0)
+      resource_keep = Array.new
+      c = Hash.new([])
+      c[:hosts] = catalog.resource_keys.map do |type, title|
         resource_count[type.downcase] += 1
-        resource = @catalog.resource("#{type}[#{title}]").to_ral
+        resource = catalog.resource("#{type}[#{title}]").to_ral
         case type
         when 'Progress_server'
           {
@@ -39,7 +48,7 @@ Puppet::Util::Log.newdesttype :queue do
           end
           nil
         when 'Progress_target'
-          @config[:targets] << {
+          c[:targets] << {
             'target' => resource[:target],
             'type'   => resource[:type],
           }
@@ -55,30 +64,31 @@ Puppet::Util::Log.newdesttype :queue do
           @message[type]['progress']['successful'] = 0
         end
       end
+      c
     rescue => e
       p e
       throw Puppet::ParseError
     end
-    @config[:hosts]
   end
 
   def connections
     return @connections if @connections
-    @connections = Stomp::Connection.new({:hosts => @config[:hosts]})
+    @connections = Stomp::Connection.new({:hosts => config[:hosts]})
     Puppet.notice((@message.merge({'puppet_run_status' => 'starting'})).to_json) if @connections
     @connections
   end
 
   def config_version
-    @config_version ||= @catalog.version
+    @config_version ||= catalog.version
   end
 
   def handle(msg)
     content = convert_msg(msg)
     time = convert_time(msg.time)
-    if ! content.empty?
+    if content and ! content.empty?
+      break if ! config
       message = envelope(content,time).to_json
-      @config[:targets].each do |target|
+      config[:targets].each do |target|
         case target['type']
         when :file, :file_append
           write_msg(target['type'],target['target'],message)
@@ -194,9 +204,13 @@ Puppet::Util::Log.newdesttype :queue do
             end
           end
           message = @message.merge({'puppet_run_status' => 'finished'})
+        when /Not using expired catalog/
+          p "skipping msg"
+          return nil
         end
       when /.+\/.+/
         begin
+          break if ! config
           if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
             resource_name = m[1]
             resource_type = m[2].downcase
