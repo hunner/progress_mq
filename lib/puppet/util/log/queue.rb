@@ -9,7 +9,8 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def initialize
-    @resource_state = Hash.new({})
+    @resource_state = Hash.new{|h,k|h[k]=Hash.new}
+    @resource_list = Hash.new{|h,k|h[k]=Array.new}
     @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     true
   end
@@ -29,9 +30,10 @@ Puppet::Util::Log.newdesttype :queue do
       nil if ! catalog
       resource_count = Hash.new(0)
       resource_keep = Array.new
-      c = Hash.new([])
+      c = Hash.new{|h,k|h[k]=Array.new}
       c[:hosts] = catalog.resource_keys.map do |type, title|
         resource_count[type.downcase] += 1
+        @resource_list[type.downcase] << "#{type}[#{title}]"
         resource = catalog.resource("#{type}[#{title}]").to_ral
         case type
         when 'Progress_server'
@@ -74,7 +76,11 @@ Puppet::Util::Log.newdesttype :queue do
   def connections
     return @connections if @connections
     @connections = Stomp::Connection.new({:hosts => config[:hosts]})
-    Puppet.notice((@message.merge({'puppet_run_status' => 'starting'})).to_json) if @connections
+    msg = JSON.load(@message.to_json).merge({'puppet_run_status' => 'starting'})
+    msg.keys.each do |type|
+      msg[type]['list'] = @resource_list[type] unless @resource_list[type].empty?
+    end
+    Puppet.notice((msg).to_json) if @connections
     @connections
   end
 
