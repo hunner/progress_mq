@@ -9,9 +9,8 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def initialize
-    @resource_state = Hash.new{|h,k|h[k]=Hash.new}
-    @resource_list = Hash.new{|h,k|h[k]=Array.new}
-    @message = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
+    @resource_state = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new}}
+    @progress = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}}
     true
   end
 
@@ -21,6 +20,7 @@ Puppet::Util::Log.newdesttype :queue do
       Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
     rescue => e
       p e
+      p e.backtrace
       nil
     end
   end
@@ -29,11 +29,12 @@ Puppet::Util::Log.newdesttype :queue do
     @config ||= begin
       nil if ! catalog
       resource_count = Hash.new(0)
+      resource_list = Hash.new{|h,k|h[k]=Array.new}
       resource_keep = Array.new
       c = Hash.new{|h,k|h[k]=Array.new}
       c[:hosts] = catalog.resource_keys.map do |type, title|
         resource_count[type.downcase] += 1
-        @resource_list[type.downcase] << "#{type}[#{title}]"
+        resource_list[type.downcase] << title
         resource = catalog.resource("#{type}[#{title}]").to_ral
         case type
         when 'Progress_server'
@@ -58,17 +59,19 @@ Puppet::Util::Log.newdesttype :queue do
         end
       end.compact
       resource_keep.each do |type|
-        @message[type]['progress']['total'] = resource_count[type]
-        @message[type]['progress']['processed'] = 0
-        @message[type]['progress']['skipped'] = 0
-        @message[type]['progress']['failed'] = 0
+        @progress[type]['progress']['total'] = resource_count[type]
+        @progress[type]['progress']['processed'] = 0
+        @progress[type]['progress']['skipped'] = 0
+        @progress[type]['progress']['failed'] = 0
+        @progress[type]['names'] = resource_list[type] unless resource_list[type].empty?
         if Puppet[:evaltrace]
-          @message[type]['progress']['successful'] = 0
+          @progress[type]['progress']['successful'] = 0
         end
       end
       c
     rescue => e
       p e
+      p e.backtrace
       throw Puppet::ParseError
     end
   end
@@ -76,11 +79,11 @@ Puppet::Util::Log.newdesttype :queue do
   def connections
     return @connections if @connections
     @connections = Stomp::Connection.new({:hosts => config[:hosts]})
-    msg = JSON.load(@message.to_json).merge({'puppet_run_status' => 'starting'})
-    msg.keys.each do |type|
-      msg[type]['list'] = @resource_list[type] unless @resource_list[type].empty?
+    msg = Hash.new{|h,k|h[k]=Hash.new}
+    @progress.keys.each do |type|
+      msg[type]['names'] = @progress[type]['names'].clone
     end
-    Puppet.notice((msg).to_json) if @connections
+    Puppet.notice((msg.merge({'puppet_run_status' => 'starting'})).to_json) if @connections
     @connections
   end
 
@@ -128,6 +131,7 @@ Puppet::Util::Log.newdesttype :queue do
       end
     rescue => e
       p e
+      p e.backtrace
     end
   end
 
@@ -148,31 +152,35 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def count_resources(type,title,status)
-    return false unless @message.include?(type)
+    return false unless @progress.include?(type)
     # State machine!
-    if ! @resource_state[type][title] # start state
+    if ! @resource_state[type][title]['transition'] # start state
       case status
       when :err # need to transition to error state and count
-        @message[type]['progress']['failed'] += 1
-        @message[type]['progress']['processed'] += 1
+        @progress[type]['progress']['failed'] += 1
+        @progress[type]['progress']['processed'] += 1
+        @resource_state[type][title]['state'] = 'failed'
       when :skip #need to transition to skip state and count
-        @message[type]['progress']['skipped'] += 1
-        @message[type]['progress']['processed'] += 1
+        @progress[type]['progress']['skipped'] += 1
+        @progress[type]['progress']['processed'] += 1
+        @resource_state[type][title]['state'] = 'skipped'
       when :eval #need to transition to final state and count
-        @message[type]['progress']['processed'] += 1
-        @message[type]['progress']['successful'] += 1
+        @progress[type]['progress']['processed'] += 1
+        @progress[type]['progress']['successful'] += 1
+        @resource_state[type][title]['state'] = 'successful'
         return true
       else # need to transition to nonerror state and count
-        @message[type]['progress']['processed'] += 1
+        @progress[type]['progress']['processed'] += 1
+        @resource_state[type][title]['state'] = 'processed'
       end
-      @resource_state[type][title] = status
+      @resource_state[type][title]['transition'] = status
       return true unless Puppet[:evaltrace]
     else # not in start state
-      case @resource_state[type][title]
+      case @resource_state[type][title]['transition']
       when :err, :skip # in error or skip state
         case status
         when :eval #transition to final state; don't count
-          @resource_state[type][title] = :eval
+          @resource_state[type][title]['transition'] = :eval
           return true
         else # do nothing
         end
@@ -181,11 +189,13 @@ Puppet::Util::Log.newdesttype :queue do
       else # in nonerror state
         case status
         when :err # transition to error state and count
-          @resource_state[type][title] = :err
-          @message[type]['progress']['failed'] += 1
+          @progress[type]['progress']['failed'] += 1
+          @resource_state[type][title]['state'] = 'failed'
+          @resource_state[type][title]['transition'] = :err
         when :eval #transition to final state and count
-          @message[type]['progress']['successful'] += 1
-          @resource_state[type][title] = :eval
+          @progress[type]['progress']['successful'] += 1
+          @resource_state[type][title]['state'] = 'successful'
+          @resource_state[type][title]['transition'] = :eval
           return true
         else # don't transition; don't count
         end
@@ -195,7 +205,7 @@ Puppet::Util::Log.newdesttype :queue do
   end
 
   def convert_msg(msg)
-    message = Hash.new
+    message = Hash.new{|h,k|h[k]=Hash.new}
     return msg unless msg.respond_to?(:message)
     begin
       message = JSON.parse(msg.message)
@@ -205,11 +215,14 @@ Puppet::Util::Log.newdesttype :queue do
         case msg.message
         when /Finished catalog run/
           if ! Puppet[:evaltrace]
-            @message.each do |k,v|
+            @progress.each do |k,v|
               v['progress']['processed'] = v['progress']['total']
             end
           end
-          message = @message.merge({'puppet_run_status' => 'finished'})
+          @progress.keys.each do |type|
+            message[type] = @progress[type]['progress'].clone
+          end
+          message = message.merge({'puppet_run_status' => 'finished'})
         when /Not using expired catalog/
           return nil
         end
@@ -223,14 +236,13 @@ Puppet::Util::Log.newdesttype :queue do
             level = :skip if msg.message =~ /^Dependency \S+ has failures: true$/
             level = :eval if msg.message =~ /^Evaluated in [\d\.]+ seconds$/
             if count_resources(resource_type,resource_title,level || msg.level)
-              message[resource_type] = @message[resource_type].clone
-              message['resource'] = resource_name
-              message['type'] = resource_type
-              message['title'] = resource_title
+              message[resource_type]['status'] = @resource_state[resource_type][resource_title]['state']
+              message[resource_type]['name'] = resource_title
             end
           end
         rescue => e
           p e
+          p e.backtrace
         end
       end
     end
