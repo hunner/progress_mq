@@ -12,7 +12,9 @@
 #            $progress_servers.
 #
 # $targets:: The target queues or files to which progress should be logged. Must
-#            be a hash. May be declared in Hiera as $progress_targets.
+#            be a hash where the key is the resource title and the value hash is
+#            the attributes. May be declared in Hiera as $progress_targets. See
+#            `puppet describe progress_target` for available hash values.
 #
 # == Actions:
 #   Places configuration file for queue report processor.
@@ -38,6 +40,9 @@
 #       '/queue/progress'        => {},
 #       '/var/log/progress.json' => {
 #         'type' => 'file'
+#       },
+#       '/var/log/progress_append.json' => {
+#         'type' => 'file_append'
 #       },
 #     },
 #   }
