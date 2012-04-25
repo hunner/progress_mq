@@ -55,6 +55,9 @@ Puppet::Util::Log.newdesttype :queue do
             'target' => resource[:target],
             'type'   => resource[:type],
           }
+          if resource[:type] == :file
+            File.delete(resource[:target])
+          end
           nil
         end
       end.compact
@@ -125,8 +128,7 @@ Puppet::Util::Log.newdesttype :queue do
 
   def write_msg(type, path, json)
     begin
-      mode = type == :file_append ? 'a' : 'w'
-      File.open(path, mode) do |f|
+      File.open(path, 'a') do |f|
         f.puts json
       end
     rescue => e
