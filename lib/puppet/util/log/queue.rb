@@ -69,6 +69,7 @@ Puppet::Util::Log.newdesttype :queue do
         @progress[type]['names'] = resource_list[type] unless resource_list[type].empty?
         if Puppet[:evaltrace]
           @progress[type]['progress']['successful'] = 0
+          @progress[type]['progress']['insync'] = 0
         end
       end
       c
@@ -168,8 +169,8 @@ Puppet::Util::Log.newdesttype :queue do
         @resource_state[type][title]['state'] = 'skipped'
       when :eval #need to transition to final state and count
         @progress[type]['progress']['processed'] += 1
-        @progress[type]['progress']['successful'] += 1
-        @resource_state[type][title]['state'] = 'successful'
+        @progress[type]['progress']['insync'] += 1
+        @resource_state[type][title]['state'] = 'insync'
         return true
       else # need to transition to nonerror state and count
         @progress[type]['progress']['processed'] += 1
