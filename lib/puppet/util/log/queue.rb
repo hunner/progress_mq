@@ -56,7 +56,7 @@ Puppet::Util::Log.newdesttype :queue do
             'type'   => resource[:type],
           }
           if resource[:type] == :file
-            File.delete(resource[:target])
+            File.delete(resource[:target]) if File.exists?(resource[:target])
           end
           nil
         end
@@ -76,7 +76,7 @@ Puppet::Util::Log.newdesttype :queue do
     rescue => e
       p e
       p e.backtrace
-      throw Puppet::ParseError
+      throw Puppet::Error
     end
   end
 
@@ -159,6 +159,8 @@ Puppet::Util::Log.newdesttype :queue do
     # State machine!
     if ! @resource_state[type][title]['transition'] # start state
       case status
+      when :start # stay in start state and do nothing
+        return false
       when :err # need to transition to error state and count
         @progress[type]['progress']['failed'] += 1
         @progress[type]['progress']['processed'] += 1
@@ -236,6 +238,7 @@ Puppet::Util::Log.newdesttype :queue do
             resource_name = m[1]
             resource_type = m[2].downcase
             resource_title = m[3]
+            level = :start if msg.message =~ /^Starting to evaluate the resource$/
             level = :skip if msg.message =~ /^Dependency \S+ has failures: true$/
             level = :eval if msg.message =~ /^Evaluated in [\d\.]+ seconds$/
             if count_resources(resource_type,resource_title,level || msg.level)
