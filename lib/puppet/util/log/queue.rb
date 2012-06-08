@@ -27,56 +27,57 @@ Puppet::Util::Log.newdesttype :queue do
 
   def config
     @config ||= begin
-      nil if ! catalog
-      resource_count = Hash.new(0)
-      resource_list = Hash.new{|h,k|h[k]=Array.new}
-      resource_keep = Array.new
-      c = Hash.new{|h,k|h[k]=Array.new}
-      c[:hosts] = catalog.resource_keys.map do |type, title|
-        resource_count[type.downcase] += 1
-        resource_list[type.downcase] << title
-        resource = catalog.resource("#{type}[#{title}]").to_ral
-        case type
-        when 'Progress_server'
-          {
-            :login    => resource[:user],
-            :passcode => resource[:password],
-            :host     => resource[:host],
-            :port     => resource[:port],
-            :ssl      => resource[:ssl],
-          }
-        when 'Progress_resource'
-          resource[:resources].each do |r_type|
-            resource_keep << r_type.downcase
+      if catalog.nil?
+        nil
+      else
+        resource_count = Hash.new(0)
+        resource_list = Hash.new{|h,k|h[k]=Array.new}
+        resource_keep = Array.new
+        c = Hash.new{|h,k|h[k]=Array.new}
+        c[:hosts] = catalog.resource_keys.map do |type, title|
+          resource_count[type.downcase] += 1
+          resource_list[type.downcase] << title
+          resource = catalog.resource("#{type}[#{title}]").to_ral
+          case type
+          when 'Progress_server'
+            {
+              :login    => resource[:user],
+              :passcode => resource[:password],
+              :host     => resource[:host],
+              :port     => resource[:port],
+              :ssl      => resource[:ssl],
+            }
+          when 'Progress_resource'
+            resource[:resources].each do |r_type|
+              resource_keep << r_type.downcase
+            end
+            nil
+          when 'Progress_target'
+            c[:targets] << {
+              'target' => resource[:target],
+              'type'   => resource[:type],
+            }
+            if resource[:type] == :file
+              File.delete(resource[:target]) if File.exists?(resource[:target])
+            end
+            nil
           end
-          nil
-        when 'Progress_target'
-          c[:targets] << {
-            'target' => resource[:target],
-            'type'   => resource[:type],
-          }
-          if resource[:type] == :file
-            File.delete(resource[:target]) if File.exists?(resource[:target])
+        end.compact
+        resource_keep.each do |type|
+          @progress[type]['progress']['total'] = resource_count[type]
+          @progress[type]['progress']['processed'] = 0
+          @progress[type]['progress']['skipped'] = 0
+          @progress[type]['progress']['failed'] = 0
+          @progress[type]['names'] = resource_list[type] unless resource_list[type].empty?
+          if Puppet[:evaltrace]
+            @progress[type]['progress']['successful'] = 0
+            @progress[type]['progress']['insync'] = 0
           end
-          nil
         end
-      end.compact
-      resource_keep.each do |type|
-        @progress[type]['progress']['total'] = resource_count[type]
-        @progress[type]['progress']['processed'] = 0
-        @progress[type]['progress']['skipped'] = 0
-        @progress[type]['progress']['failed'] = 0
-        @progress[type]['names'] = resource_list[type] unless resource_list[type].empty?
-        if Puppet[:evaltrace]
-          @progress[type]['progress']['successful'] = 0
-          @progress[type]['progress']['insync'] = 0
-        end
+        c
       end
-      c
     rescue => e
-      p e
-      p e.backtrace
-      throw Puppet::Error
+      throw Puppet::Error, "#{e.backtrace[0]} #{e.message}"
     end
   end
 
@@ -98,8 +99,7 @@ Puppet::Util::Log.newdesttype :queue do
   def handle(msg)
     content = convert_msg(msg)
     time = convert_time(msg.time)
-    if content and ! content.empty?
-      break if ! config
+    if content and ! content.empty? and config
       message = envelope(content,time).to_json
       config[:targets].each do |target|
         case target['type']
@@ -233,8 +233,7 @@ Puppet::Util::Log.newdesttype :queue do
         end
       when /.+\/.+/
         begin
-          break if ! config
-          if m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
+          if config and m = msg.source.match(/(([^\/]+?)\[([^\[]+?)\])(\/[a-z]+)?$/)
             resource_name = m[1]
             resource_type = m[2].downcase
             resource_title = m[3]
