@@ -34,8 +34,10 @@ Puppet::Reports.register_report(:queue) do
     r['status'] = status
     r['configuration_version'] = configuration_version
     r['metrics'] = Hash.new
-    r['metrics']['total'] = metrics['time']['total']
-    r['metrics']['config_retrieval'] = metrics['time']['config_retrieval']
+    unless metrics.empty?
+      r['metrics']['total'] = metrics['time']['total']
+      r['metrics']['config_retrieval'] = metrics['time']['config_retrieval']
+    end
     r['resource_statuses'] = Hash.new{|h,k|h[k]=[]}
     resource_statuses.each do |id,value|
       if value.failed
