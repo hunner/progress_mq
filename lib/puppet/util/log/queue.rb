@@ -17,7 +17,12 @@ Puppet::Util::Log.newdesttype :queue do
   def catalog
     @catalog ||= begin
       #Puppet::Face[:catalog,'0.0.1'].find(Puppet[:certname])
-      Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
+      if Puppet.settings[:name] == "apply"
+        node = Puppet::Node.indirection.find(Puppet[:node_name_value])
+        Puppet::Resource::Catalog.indirection.find(node.name, :use_node => node)
+      else
+        Puppet::Resource::Catalog.indirection.find(Puppet[:certname], :ignore_terminus => true)
+      end
     rescue => e
       p e
       p e.backtrace
@@ -37,7 +42,11 @@ Puppet::Util::Log.newdesttype :queue do
         c[:hosts] = catalog.resource_keys.map do |type, title|
           resource_count[type.downcase] += 1
           resource_list[type.downcase] << title
-          resource = catalog.resource("#{type}[#{title}]").to_ral
+          resource = catalog.resource("#{type}[#{title}]")
+
+          next unless resource
+          resource = resource.to_ral
+
           case type
           when 'Progress_server'
             {
@@ -77,7 +86,7 @@ Puppet::Util::Log.newdesttype :queue do
         c
       end
     rescue => e
-      throw Puppet::Error, "#{e.backtrace[0]} #{e.message}"
+      raise Puppet::Error, "#{e.backtrace[0]} #{e.message}"
     end
   end
 
